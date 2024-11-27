@@ -3,22 +3,13 @@
 class Media
   include Singleton
   include Turbo::Broadcastable
-
   extend ActiveModel::Naming
 
-  @@syncing = false
-
   class << self
-    def sync(type = :all, file_paths = [])
-      self.syncing = true
-      file_paths = MediaFile.file_paths if type == :all
-
+    def sync(type, file_paths = [])
       return if file_paths.blank?
 
       case type
-      when :all
-        file_hashes = add_files(file_paths)
-        clean_up(file_hashes)
       when :added
         add_files(file_paths)
       when :removed
@@ -27,17 +18,39 @@ class Media
         remove_files(file_paths)
         add_files(file_paths)
       end
-    ensure
-      self.syncing = false
     end
 
     def syncing?
-      @@syncing
+      Rails.cache.fetch("media_syncing") { false }
     end
 
     def syncing=(is_syncing)
-      @@syncing = is_syncing
-      instance.broadcast_render_to "media_sync", partial: "settings/media_sync"
+      return if is_syncing == syncing?
+      Rails.cache.write("media_syncing", is_syncing, expires_in: 1.hour)
+    end
+
+    def clean_up(file_hashes = [])
+      Song.where.not(md5_hash: file_hashes).destroy_all if file_hashes.present?
+
+      # Clean up no content albums and artist.
+      Album.where.missing(:songs).destroy_all
+      Artist.where.missing(:songs, :albums).destroy_all
+    end
+
+    def fetch_external_metadata
+      return unless Setting.discogs_token.present?
+
+      jobs = []
+
+      Artist.lack_metadata.find_each do |artist|
+        jobs << AttachCoverImageFromDiscogsJob.new(artist)
+      end
+
+      Album.lack_metadata.find_each do |album|
+        jobs << AttachCoverImageFromDiscogsJob.new(album)
+      end
+
+      ActiveJob.perform_all_later(jobs)
     end
 
     private
@@ -59,41 +72,36 @@ class Media
     end
 
     def attach(file_info)
-      artist = Artist.find_or_create_by!(name: file_info[:artist_name])
+      artist = Artist.create_or_find_by!(name: file_info[:artist_name] || Artist::UNKNOWN_NAME)
+      various_artist = Artist.create_or_find_by!(various: true) if various_artist?(file_info)
 
-      album = if various_artist?(file_info)
-        various_artist = Artist.find_or_create_by!(is_various: true)
-        Album.find_or_create_by!(artist: various_artist, name: file_info[:album_name])
-      else
-        Album.find_or_create_by!(artist: artist, name: file_info[:album_name])
+      album = Album.create_or_find_by!(
+        artist_id: various_artist&.id || artist.id,
+        name: file_info[:album_name] || Album::UNKNOWN_NAME
+      )
+
+      album.update!(album_info(file_info))
+
+      unless album.has_cover_image?
+        album.cover_image.attach(file_info[:image]) if file_info[:image].present?
       end
 
-      album.update_column(:year, file_info[:year]) if file_info[:year].present? && album.year.blank?
-      album.update_column(:genre, file_info[:genre]) if file_info[:genre].present? && album.genre.blank?
-
-      # Attach image from file to the album.
-      AttachAlbumImageFromFileJob.perform_later(album, file_info[:file_path]) unless album.has_image?
-
-      Song.find_or_create_by!(md5_hash: file_info[:md5_hash]) do |item|
-        item.attributes = song_info(file_info).merge(album: album, artist: artist)
+      Song.create_or_find_by!(md5_hash: file_info[:md5_hash]) do |item|
+        item.attributes = song_info(file_info).merge(album_id: album.id, artist_id: artist.id)
       end
     end
 
     def song_info(file_info)
-      file_info.slice(:name, :tracknum, :duration, :file_path, :file_path_hash)
+      file_info.slice(:name, :tracknum, :discnum, :duration, :file_path, :file_path_hash, :bit_depth).compact
+    end
+
+    def album_info(file_info)
+      file_info.slice(:year, :genre).compact
     end
 
     def various_artist?(file_info)
       albumartist = file_info[:albumartist_name]
       albumartist.present? && (albumartist.casecmp("various artists").zero? || albumartist != file_info[:artist_name])
-    end
-
-    def clean_up(file_hashes = [])
-      Song.where.not(md5_hash: file_hashes).destroy_all if file_hashes.present?
-
-      # Clean up no content albums and artist.
-      Album.where.missing(:songs).destroy_all
-      Artist.where.missing(:songs, :albums).destroy_all
     end
   end
 end

@@ -4,12 +4,13 @@ module Api
   module V1
     class FavoritePlaylist::SongsController < ApiController
       before_action :find_playlist
-      before_action :find_song
+      before_action :find_song, only: [:destroy]
 
       def create
+        @song = Song.find(params[:song_id])
         @playlist.playlists_songs.create(song_id: @song.id, position: 1)
       rescue ActiveRecord::RecordNotUnique
-        render json: {error: "RecordNotUnique", message: t("error.already_in_playlist")}, status: :bad_request
+        raise BlackCandy::DuplicatePlaylistSong
       end
 
       def destroy
@@ -19,7 +20,7 @@ module Api
       private
 
       def find_song
-        @song = Song.find(params[:song_id])
+        @song = @playlist.songs.find(params[:id])
       end
 
       def find_playlist

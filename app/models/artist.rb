@@ -1,9 +1,16 @@
 # frozen_string_literal: true
 
 class Artist < ApplicationRecord
-  include Searchable
-  include Imageable
-  include Sortable
+  UNKNOWN_NAME = "Unknown Artist"
+  VARIOUS_NAME = "Various Artists"
+
+  include SearchableConcern
+  include ImageableConcern
+  include SortableConcern
+
+  after_initialize :set_default_name, if: :new_record?
+
+  validates :name, presence: true
 
   has_many :albums, dependent: :destroy
   has_many :songs
@@ -12,15 +19,14 @@ class Artist < ApplicationRecord
 
   sort_by :name, :created_at
 
-  def title
-    return I18n.t("label.various_artists") if is_various?
-    return I18n.t("label.unknown_artist") if is_unknown?
+  scope :lack_metadata, -> {
+    includes(:cover_image_attachment)
+      .where(cover_image_attachment: {id: nil})
+      .where.not(name: [Artist::UNKNOWN_NAME, Artist::VARIOUS_NAME])
+  }
 
-    name
-  end
-
-  def is_unknown?
-    name.blank?
+  def unknown?
+    name == UNKNOWN_NAME
   end
 
   def all_albums
@@ -29,5 +35,11 @@ class Artist < ApplicationRecord
 
   def appears_on_albums
     Album.joins(:songs).where("albums.artist_id != ? AND songs.artist_id = ?", id, id).distinct
+  end
+
+  private
+
+  def set_default_name
+    self.name ||= various? ? VARIOUS_NAME : UNKNOWN_NAME
   end
 end

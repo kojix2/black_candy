@@ -1,37 +1,22 @@
-import { randomIndex, shuffle } from './helper'
+import { randomIndex } from './helper'
 
 class Playlist {
   orderedSongs = []
   shuffledSongs = []
   isShuffled = false
 
-  update (songIds) {
-    this.orderedSongs = songIds.map((songId) => {
-      return { id: Number(songId) }
-    })
+  insert (index, song) {
+    if (this.includes(song.id)) { return }
 
-    this.shuffledSongs = shuffle(Object.assign([], this.songs))
-  }
-
-  pushSong (songId, toTheLast = false) {
-    const song = { id: Number(songId) }
-    const playerCurrentIndex = App.player.currentIndex
-
-    let pushIndex = playerCurrentIndex === 0 ? 0 : playerCurrentIndex + 1
-
-    if (toTheLast) {
-      pushIndex = this.length
-    }
-
-    this.orderedSongs.splice(pushIndex, 0, song)
+    this.orderedSongs.splice(index, 0, song)
     this.shuffledSongs.splice(randomIndex(this.shuffledSongs.length), 0, song)
-
-    return this.indexOf(songId)
   }
 
   deleteSong (songId) {
-    const orderedSongsindex = this._indexOfSongs(this.orderedSongs, songId)
-    const shuffledSongsindex = this._indexOfSongs(this.shuffledSongs, songId)
+    if (!this.includes(songId)) { return -1 }
+
+    const orderedSongsindex = this.#indexOfSongs(this.orderedSongs, songId)
+    const shuffledSongsindex = this.#indexOfSongs(this.shuffledSongs, songId)
 
     this.orderedSongs.splice(orderedSongsindex, 1)
     this.shuffledSongs.splice(shuffledSongsindex, 1)
@@ -40,14 +25,14 @@ class Playlist {
   }
 
   indexOf (songId) {
-    return this._indexOfSongs(this.songs, songId)
+    return this.#indexOfSongs(this.songs, songId)
   }
 
-  move (fromIndex, toIndex) {
-    this.orderedSongs.splice(toIndex, 0, this.orderedSongs.splice(fromIndex, 1)[0])
+  includes (songId) {
+    return this.indexOf(songId) !== -1
   }
 
-  _indexOfSongs (songs, songId) {
+  #indexOfSongs (songs, songId) {
     return songs.map((song) => song.id).indexOf(Number(songId))
   }
 

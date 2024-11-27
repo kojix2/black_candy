@@ -1,18 +1,11 @@
-import { Howl } from 'howler'
-import { fetchRequest, dispatchEvent } from './helper'
+import { Howl, Howler } from 'howler'
+import { dispatchEvent } from './helper'
 import Playlist from './playlist'
-import Cookies from 'js-cookie'
 
 class Player {
-  currentIndex = 0
   currentSong = {}
   isPlaying = false
   playlist = new Playlist()
-
-  constructor () {
-    // Remove current song id from cookies if there is no current playing song
-    Cookies.remove('current_song_id')
-  }
 
   playOn (index) {
     if (this.playlist.length === 0) { return }
@@ -20,35 +13,22 @@ class Player {
     dispatchEvent(document, 'player:beforePlaying')
 
     const song = this.playlist.songs[index]
-    this.currentIndex = index
     this.currentSong = song
     this.isPlaying = true
 
     if (!song.howl) {
-      fetchRequest(`/api/v1/songs/${song.id}`)
-        .then((response) => {
-          return response.json()
-        })
-        .then((data) => {
-          song.howl = new Howl({
-            src: [data.url],
-            format: [data.format],
-            html5: true,
-            onplay: () => { dispatchEvent(document, 'player:playing') },
-            onpause: () => { dispatchEvent(document, 'player:pause') },
-            onend: () => { dispatchEvent(document, 'player:end') },
-            onstop: () => { dispatchEvent(document, 'player:stop') }
-          })
-
-          Object.assign(song, data)
-          song.howl.play()
-        })
-    } else {
-      song.howl.play()
+      song.howl = new Howl({
+        src: [song.url],
+        format: [song.format],
+        html5: true,
+        onplay: () => { dispatchEvent(document, 'player:playing') },
+        onpause: () => { dispatchEvent(document, 'player:pause') },
+        onend: () => { dispatchEvent(document, 'player:end') },
+        onstop: () => { dispatchEvent(document, 'player:stop') }
+      })
     }
 
-    // keep track id of the current playing song
-    Cookies.set('current_song_id', song.id)
+    song.howl.play()
   }
 
   play () {
@@ -68,13 +48,11 @@ class Player {
 
   stop () {
     this.isPlaying = false
-    this.currentSong.howl && this.currentSong.howl.stop()
 
-    if (this.playlist.length === 0) {
-      // reset current song
-      this.currentIndex = 0
-      this.currentSong = {}
-    }
+    Howler.stop()
+
+    // reset current song
+    this.currentSong = {}
   }
 
   next () {
@@ -86,7 +64,7 @@ class Player {
   }
 
   skipTo (index) {
-    this.stop()
+    this.currentSong.howl && this.currentSong.howl.stop()
 
     if (index >= this.playlist.length) {
       index = 0
@@ -99,6 +77,10 @@ class Player {
 
   seek (seconds) {
     this.currentSong.howl.seek(seconds)
+  }
+
+  get currentIndex () {
+    return Math.max(this.playlist.indexOf(this.currentSong.id), 0)
   }
 }
 

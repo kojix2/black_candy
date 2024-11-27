@@ -1,14 +1,18 @@
 # frozen_string_literal: true
 
 class Album < ApplicationRecord
-  include Searchable
-  include Imageable
-  include Filterable
-  include Sortable
+  UNKNOWN_NAME = "Unknown Album"
 
-  validates :name, uniqueness: {scope: :artist}
+  include SearchableConcern
+  include ImageableConcern
+  include FilterableConcern
+  include SortableConcern
 
-  has_many :songs, -> { order(:tracknum) }, inverse_of: :album, dependent: :destroy
+  after_initialize :set_default_name, if: :new_record?
+
+  validates :name, presence: true
+
+  has_many :songs, -> { order(:discnum, :tracknum) }, inverse_of: :album, dependent: :destroy
   belongs_to :artist, touch: true
 
   search_by :name, associations: {artist: :name}
@@ -18,11 +22,20 @@ class Album < ApplicationRecord
   sort_by :name, :year, :created_at
   sort_by_associations artist: :name
 
-  def title
-    is_unknown? ? I18n.t("label.unknown_album") : name
+  scope :lack_metadata, -> {
+    includes(:artist, :cover_image_attachment)
+      .where(cover_image_attachment: {id: nil})
+      .where.not(name: Album::UNKNOWN_NAME)
+      .where.not(artists: {name: Artist::UNKNOWN_NAME})
+  }
+
+  def unknown?
+    name == UNKNOWN_NAME
   end
 
-  def is_unknown?
-    name.blank?
+  private
+
+  def set_default_name
+    self.name ||= UNKNOWN_NAME
   end
 end

@@ -17,9 +17,7 @@ class CurrentPlaylistSongsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should add song next to the current song when current song did set" do
-    cookies[:current_song_id] = @playlist.song_ids.first
-
-    post current_playlist_songs_url, params: {song_id: 3}, xhr: true
+    post current_playlist_songs_url, params: {song_id: 3, current_song_id: 1}, xhr: true
     assert_equal [1, 3, 2], @playlist.reload.song_ids
   end
 
@@ -36,5 +34,12 @@ class CurrentPlaylistSongsControllerTest < ActionDispatch::IntegrationTest
   test "should has error flash when song alreay in playlist" do
     post current_playlist_songs_url, params: {song_id: 2}, xhr: true
     assert flash[:error].present?
+  end
+
+  test "should redirect to show current playlist after added the first song" do
+    @playlist.songs.clear
+    post current_playlist_songs_url, params: {song_id: 1}
+
+    assert_redirected_to current_playlist_songs_path
   end
 end

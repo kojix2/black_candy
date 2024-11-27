@@ -6,12 +6,7 @@ class Users::SettingsController < ApplicationController
 
   def update
     return unless @user.update(user_setting_params)
-
-    # set theme cookie to track theme when user didn't login
-    cookies.permanent[:theme] = @user.theme
-    ActionCable.server.broadcast("theme_update", {theme: @user.theme})
-
-    flash.now[:success] = t("success.update")
+    flash.now[:success] = t("notice.updated")
   end
 
   private
@@ -25,6 +20,6 @@ class Users::SettingsController < ApplicationController
   end
 
   def auth_user
-    raise BlackCandy::Error::Forbidden unless @user == Current.user
+    raise BlackCandy::Forbidden unless @user == Current.user
   end
 end

@@ -4,29 +4,59 @@ class ApplicationController < ActionController::Base
   include Pagy::Backend
   include SessionsHelper
 
-  helper_method :turbo_native?, :need_transcode?, :render_flash
+  helper_method :native_app?, :need_transcode?, :render_flash, :mobile?, :dialog?
 
-  before_action :find_current_user
+  before_action :find_current_session
+  before_action :find_current_request_details
   before_action :require_login
 
-  rescue_from BlackCandy::Error::Forbidden do
+  allow_browser versions: :modern, block: -> { render template: "errors/unsupported_browser", layout: "plain", status: :not_acceptable }
+
+  rescue_from BlackCandy::Forbidden do |error|
     respond_to do |format|
-      format.js { head :forbidden }
-      format.json { head :forbidden }
+      format.json { render_json_error(error, :forbidden) }
       format.html { render template: "errors/forbidden", layout: "plain", status: :forbidden }
     end
   end
 
-  rescue_from ActionController::InvalidAuthenticityToken do
-    logout_current_user
+  rescue_from BlackCandy::InvalidCredential do |error|
+    respond_to do |format|
+      format.json { render_json_error(error, :unauthorized) }
+      format.html { redirect_to new_session_path }
+    end
   end
 
-  def need_transcode?(format)
-    return true unless format.in?(Stream::SUPPORTED_FORMATS)
-    return true if safari? && !format.in?(Stream::SAFARI_SUPPORTED_FORMATS)
-    return true if turbo_ios? && !format.in?(Stream::IOS_SUPPORTED_FORMATS)
+  rescue_from BlackCandy::DuplicatePlaylistSong do |error|
+    respond_to do |format|
+      format.json { render_json_error(error, :bad_request) }
+    end
+  end
 
-    Setting.allow_transcode_lossless ? format.in?(Stream::LOSSLESS_FORMATS) : false
+  rescue_from ActiveRecord::RecordNotFound do |error|
+    respond_to do |format|
+      format.json { render_json_error(OpenStruct.new(type: "RecordNotFound", message: error.message), :not_found) }
+      format.html { render template: "errors/not_found", layout: "plain", status: :not_found }
+    end
+  end
+
+  rescue_from ActionController::InvalidAuthenticityToken do
+    logout
+  end
+
+  def need_transcode?(song)
+    song_format = song.format
+
+    unless native_app?
+      return true if !browser.safari? && !song_format.in?(Stream::WEB_SUPPORTED_FORMATS)
+      # Non-Safari browsers don't support ALAC format. So we need to transcode it.
+      return true if !browser.safari? && song_format == "m4a" && song.lossless?
+      return true if browser.safari? && !song_format.in?(Stream::SAFARI_SUPPORTED_FORMATS)
+    end
+
+    return true if ios_app? && !song_format.in?(Stream::IOS_SUPPORTED_FORMATS)
+    return true if android_app? && !song_format.in?(Stream::ANDROID_SUPPORTED_FORMATS)
+
+    Setting.allow_transcode_lossless? ? song.lossless? : false
   end
 
   def flash_errors_message(object, now: false)
@@ -39,14 +69,8 @@ class ApplicationController < ActionController::Base
     end
   end
 
-  def turbo_native?
-    turbo_ios? || turbo_android?
-  end
-
-  def stream_js(&block)
-    turbo_stream.replace "turbo-script" do
-      "<script id='turbo-script' type='text/javascript'>#{block.call}</script>".html_safe
-    end
+  def native_app?
+    ios_app? || android_app?
   end
 
   def redirect_back_with_referer_params(fallback_location:)
@@ -62,17 +86,24 @@ class ApplicationController < ActionController::Base
     turbo_stream.update "turbo-flash", partial: "shared/flash"
   end
 
+  def mobile?
+    browser.device.mobile?
+  end
+
+  def dialog?
+    is_a? Dialog::DialogController
+  end
+
   private
 
-  def find_current_user
-    Current.user = UserSession.find&.user
-    cookies.signed[:user_id] ||= Current.user&.id
+  def find_current_session
+    Current.session = Session.find_by(id: cookies.signed[:session_id])
   end
 
   def require_login
     return if logged_in?
 
-    if turbo_native?
+    if native_app?
       head :unauthorized
     else
       redirect_to new_session_path
@@ -80,32 +111,23 @@ class ApplicationController < ActionController::Base
   end
 
   def require_admin
-    raise BlackCandy::Error::Forbidden unless is_admin?
+    raise BlackCandy::Forbidden if BlackCandy.config.demo_mode? || !is_admin?
   end
 
-  def logout_current_user
-    UserSession.find&.destroy
-    cookies.delete(:user_id)
-
-    redirect_to new_session_path
+  def ios_app?
+    Current.user_agent.to_s.match?(/Black Candy iOS/)
   end
 
-  def browser
-    @browser ||= Browser.new(
-      request.headers["User-Agent"],
-      accept_language: request.headers["Accept-Language"]
-    )
+  def android_app?
+    Current.user_agent.to_s.match?(/Black Candy Android/)
   end
 
-  def safari?
-    browser.safari? || browser.core_media?
+  def render_json_error(error, status)
+    render json: {type: error.type, message: error.message}, status: status
   end
 
-  def turbo_ios?
-    request.user_agent.to_s.match?(/Turbo Native iOS/)
-  end
-
-  def turbo_android?
-    request.user_agent.to_s.match?(/Turbo Native Android/)
+  def find_current_request_details
+    Current.ip_address = request.ip
+    Current.user_agent = request.user_agent
   end
 end

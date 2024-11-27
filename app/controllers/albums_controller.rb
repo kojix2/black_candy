@@ -1,16 +1,13 @@
 # frozen_string_literal: true
 
 class AlbumsController < ApplicationController
-  include Playable
-
-  layout proc { "dialog" unless turbo_native? }, only: :edit
-
-  before_action :require_admin, only: [:edit, :update]
+  before_action :require_admin, only: [:update]
   before_action :find_album, except: [:index]
-  before_action :get_sort_options, only: [:index]
+  before_action :get_sort_option, only: [:index]
 
   def index
     records = Album.includes(:artist)
+      .with_attached_cover_image
       .filter_records(filter_params)
       .sort_records(*sort_params)
 
@@ -18,16 +15,12 @@ class AlbumsController < ApplicationController
   end
 
   def show
-    @songs = @album.songs.includes(:artist)
-    @album.attach_image_from_discogs
-  end
-
-  def edit
+    @groped_songs = @album.songs.includes(:artist).group_by(&:discnum)
   end
 
   def update
     if @album.update(album_params)
-      flash[:success] = t("success.update")
+      flash[:success] = t("notice.updated")
     else
       flash_errors_message(@album)
     end
@@ -38,19 +31,11 @@ class AlbumsController < ApplicationController
   private
 
   def album_params
-    params.require(:album).permit(:image)
+    params.require(:album).permit(:cover_image)
   end
 
   def find_album
     @album = Album.find(params[:id])
-  end
-
-  def find_all_song_ids
-    @song_ids = Album.find(params[:id]).song_ids
-  end
-
-  def after_played
-    Current.user.add_album_to_recently_played(@album)
   end
 
   def filter_params
@@ -61,7 +46,7 @@ class AlbumsController < ApplicationController
     [params[:sort], params[:sort_direction]]
   end
 
-  def get_sort_options
-    @sort_options = Album.sort_options
+  def get_sort_option
+    @sort_option = Album::SORT_OPTION
   end
 end

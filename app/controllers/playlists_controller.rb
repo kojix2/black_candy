@@ -1,27 +1,18 @@
 # frozen_string_literal: true
 
 class PlaylistsController < ApplicationController
-  layout proc { "dialog" unless turbo_native? }, only: [:new, :edit]
-
-  before_action :find_playlist, only: [:edit, :destroy, :update]
-  before_action :get_sort_options, only: [:index]
+  before_action :find_playlist, only: [:destroy, :update]
+  before_action :get_sort_option, only: [:index]
 
   def index
-    @pagy, @playlists = pagy(Current.user.all_playlists.sort_records(*sort_params))
-  end
-
-  def new
-    @playlist = Playlist.new
-  end
-
-  def edit
+    @pagy, @playlists = pagy(Current.user.playlists_with_favorite.sort_records(*sort_params))
   end
 
   def create
     @playlist = Current.user.playlists.new playlist_params
 
     if @playlist.save
-      flash[:success] = t("success.create")
+      flash[:success] = t("notice.created")
     else
       flash_errors_message(@playlist)
     end
@@ -31,7 +22,7 @@ class PlaylistsController < ApplicationController
 
   def update
     if @playlist.update(playlist_params)
-      flash[:success] = t("success.update")
+      flash[:success] = t("notice.updated")
     else
       flash_errors_message(@playlist)
     end
@@ -59,7 +50,7 @@ class PlaylistsController < ApplicationController
     [params[:sort], params[:sort_direction]]
   end
 
-  def get_sort_options
-    @sort_options = Playlist.sort_options
+  def get_sort_option
+    @sort_option = Playlist::SORT_OPTION
   end
 end

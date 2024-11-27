@@ -1,22 +1,20 @@
 <!DOCTYPE html>
-<html>
+<html data-color-scheme='<%= User::DEFAULT_THEME %>'>
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no'>
-    <% if turbo_native? %>
-      <%# Set title for turbo native %>
-      <meta data-native-title="<%= yield(:native_title) %>">
-    <% end %>
-    <title><%= content_for?(:title) ? yield(:title) : "Black Candy" %></title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title><%= content_for?(:title) ? yield(:title) : t(:app_name) %></title>
     <%= csrf_meta_tags %>
-    <%= favicon_link_tag 'link_icon.png', type: 'image/png' %>
+    <%= favicon_link_tag "link_icon.png", type: "image/png" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
-    <%= javascript_include_tag "application", "data-turbo-track": "reload", defer: true %>
-    <script id='turbo-script'></script>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+    <%= yield(:head) %>
+    <link rel="manifest" href="/manifest.json">
   </head>
 
-  <body data-color-scheme='<%= Current.user&.theme || cookies[:theme].presence || User::DEFAULT_THEME  %>'>
+  <body>
     <%= content_for?(:body) ? yield(:body) : yield %>
-    <%= render 'shared/icons' %>
+    <%= render "shared/icons" %>
   </body>
 </html>

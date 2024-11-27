@@ -9,7 +9,8 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   driven_by :cuprite, screen_size: [1400, 900], options: {
     browser_options: {"no-sandbox": nil},
     url_blacklist: ["https://www.gravatar.com"],
-    timeout: 10
+    timeout: 10,
+    process_timeout: 20
   }
 
   def login_as(user)
@@ -17,8 +18,9 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
     fill_in "Email", with: user.email
     fill_in "Password", with: "foobar"
-
     click_on "Login"
+
+    assert_current_path root_url
   end
 end
 

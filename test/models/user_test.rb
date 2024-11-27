@@ -13,20 +13,38 @@ class UserTest < ActiveSupport::TestCase
   ].freeze
 
   setup do
-    @user = User.create(email: "test@test.com", password: "foobar")
+    @user = User.create(email: "test@test.com", password: "foobar", theme: "auto")
     @user.playlists.create(name: "test")
   end
 
   test "should have valid email" do
-    assert new_user(email: "test1@test.com").valid?
+    assert User.new(email: "test1@test.com", password: "foobar").valid?
 
     INVALID_EMAIL_ADDRESSES.each do |email|
-      assert_not new_user(email: email).valid?
+      assert_not User.new(email: email, password: "foobar").valid?
     end
+  end
+
+  test "password should not less than 6 characters" do
+    assert User.new(email: "test1@test.com", password: "foobar").valid?
+    assert_not User.new(email: "test1@test.com", password: "foo").valid?
+  end
+
+  test "should check password confirmation when it provided" do
+    assert User.new(email: "test1@test.com", password: "foobar", password_confirmation: "foobar").valid?
+    assert_not User.new(email: "test1@test.com", password: "foobar", password_confirmation: "foo").valid?
   end
 
   test "should downcase email when create" do
     assert_equal "test1@test.com", User.create(email: "TEST1@test.com", password: "foobar").email
+  end
+
+  test "should remove deprecated_password_salt after update password" do
+    user = users(:visitor1)
+    assert_not_nil user.deprecated_password_salt
+
+    user.update(password: "foobarfoo")
+    assert_nil user.reload.deprecated_password_salt
   end
 
   test "should have current playlist after created" do
@@ -43,9 +61,9 @@ class UserTest < ActiveSupport::TestCase
   end
 
   test "should return all playlist except current playlist" do
-    all_playlists = @user.all_playlists.map { |playlist| playlist.class.name }.uniq.sort
+    all_playlists = @user.playlists_with_favorite.map { |playlist| playlist.class.name }.uniq.sort
 
-    assert_equal 2, @user.all_playlists.count
+    assert_equal 2, @user.playlists_with_favorite.count
     assert_equal %w[FavoritePlaylist Playlist], all_playlists
   end
 
@@ -101,5 +119,15 @@ class UserTest < ActiveSupport::TestCase
     @user.add_album_to_recently_played albums(:album1)
 
     assert_equal User::RECENTLY_PLAYED_LIMIT, @user.recently_played_album_ids.count
+  end
+
+  test "should broadcast theme change" do
+    assert_no_turbo_stream_broadcasts [@user, :theme] do
+      @user.update(theme: "auto")
+    end
+
+    assert_turbo_stream_broadcasts [@user, :theme] do
+      @user.update(theme: "light")
+    end
   end
 end

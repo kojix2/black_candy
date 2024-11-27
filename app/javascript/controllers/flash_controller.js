@@ -1,15 +1,20 @@
 import { Controller } from '@hotwired/stimulus'
+import { isNativeApp } from '../helper'
 
 export default class extends Controller {
+  static get shouldLoad () {
+    return !isNativeApp()
+  }
+
   static values = {
     timeout: { type: Number, default: 4000 }
   }
 
   connect () {
-    setTimeout(this._removeFlash.bind(this), this.timeoutValue)
+    setTimeout(this.#removeFlash.bind(this), this.timeoutValue)
   }
 
-  _removeFlash () {
+  #removeFlash () {
     this.element.addEventListener('animationend', function removeFlashElement () {
       this.remove()
     }, { once: true })

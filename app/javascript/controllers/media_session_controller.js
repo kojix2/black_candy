@@ -1,12 +1,17 @@
 import { Controller } from '@hotwired/stimulus'
+import { installEventHandler } from './mixins/event_handler'
 
 export default class extends Controller {
   DEFAULT_SKIP_TIME = 10
 
+  initialize () {
+    installEventHandler(this)
+  }
+
   connect () {
     if (!('mediaSession' in navigator)) { return }
 
-    document.addEventListener('player:playing', this._setPlayingStatus)
+    this.handleEvent('player:playing', { with: this.#setPlayingStatus })
 
     Object.entries(this.mediaSessionActions).forEach(([actionName, actionHandler]) => {
       try {
@@ -17,18 +22,12 @@ export default class extends Controller {
     })
   }
 
-  disconnect () {
-    if (!('mediaSession' in navigator)) { return }
-
-    document.removeEventListener('player:playing', this._setPlayingStatus)
+  #setPlayingStatus = () => {
+    this.#updateMetadata()
+    this.#updatePositionState()
   }
 
-  _setPlayingStatus = () => {
-    this._updateMetadata()
-    this._updatePositionState()
-  }
-
-  _updateMetadata = () => {
+  #updateMetadata = () => {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: this.currentSong.name,
       artist: this.currentSong.artist_name,
@@ -41,7 +40,7 @@ export default class extends Controller {
     })
   }
 
-  _updatePositionState = () => {
+  #updatePositionState = () => {
     if (!('setPositionState' in navigator.mediaSession)) { return }
 
     navigator.mediaSession.setPositionState({
@@ -51,55 +50,55 @@ export default class extends Controller {
     })
   }
 
-  _play = () => {
+  #play = () => {
     this.player.play()
   }
 
-  _pause = () => {
+  #pause = () => {
     this.player.pause()
   }
 
-  _next = () => {
+  #next = () => {
     this.player.next()
   }
 
-  _previous = () => {
+  #previous = () => {
     this.player.previous()
   }
 
-  _stop = () => {
+  #stop = () => {
     this.player.stop()
   }
 
-  _seekBackward = (event) => {
+  #seekBackward = (event) => {
     const skipTime = event.seekOffset || this.DEFAULT_SKIP_TIME
 
     this.player.seek(this.currentSong.howl.seek() - skipTime)
-    this._updatePositionState()
+    this.#updatePositionState()
   }
 
-  _seekForward = (event) => {
+  #seekForward = (event) => {
     const skipTime = event.seekOffset || this.DEFAULT_SKIP_TIME
 
     this.player.seek(this.currentSong.howl.seek() + skipTime)
-    this._updatePositionState()
+    this.#updatePositionState()
   }
 
-  _seekTo = (event) => {
+  #seekTo = (event) => {
     this.player.seek(event.seekTime)
-    this._updatePositionState()
+    this.#updatePositionState()
   }
 
   get mediaSessionActions () {
     return {
-      play: this._play,
-      pause: this._pause,
-      previoustrack: this._previous,
-      nexttrack: this._next,
-      stop: this._stop,
-      seekbackward: this._seekBackward,
-      seekforward: this._seekForward,
-      seekto: this._seekTo
+      play: this.#play,
+      pause: this.#pause,
+      previoustrack: this.#previous,
+      nexttrack: this.#next,
+      stop: this.#stop,
+      seekbackward: this.#seekBackward,
+      seekforward: this.#seekForward,
+      seekto: this.#seekTo
     }
   }
 

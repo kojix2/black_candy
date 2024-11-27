@@ -10,6 +10,8 @@
 # Ignore the default SQLite database.
 /db/*.sqlite3
 /db/*.sqlite3-*
+/db/**/*.sqlite3
+/db/**/*.sqlite3-*
 
 # Ignore all logfiles and tempfiles.
 /log/*
@@ -33,7 +35,6 @@
 /config/master.key
 /public/packs
 /public/packs-test
-/public/uploads
 /public/assets
 /node_modules
 
@@ -45,7 +46,6 @@ yarn-debug.log*
 /.direnv
 /.gems
 /.pg_data
-/.redis_data
 /.idea
 /coverage
 
@@ -57,3 +57,10 @@ yarn-debug.log*
 !.env.template
 
 .is-edge-release.txt
+
+# Ignore storage (uploaded files in development and any SQLite databases).
+/storage/*
+!/storage/.keep
+/tmp/storage/*
+!/tmp/storage/
+!/tmp/storage/.keep

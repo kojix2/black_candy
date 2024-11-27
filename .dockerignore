@@ -9,15 +9,15 @@
 /node_modules
 /public/packs/
 /public/packs-test/
-/public/uploads/
 /test
 /screenshots
+/coverage
 /.github
 /config/master.key
 /.direnv
 /.gems
 /.pg_data
-/.redis_data
+/docs
 
 yarn-error.log
 Dockerfile

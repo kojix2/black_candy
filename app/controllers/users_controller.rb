@@ -20,7 +20,7 @@ class UsersController < ApplicationController
     @user = User.new user_params
 
     if @user.save
-      flash[:success] = t("success.create")
+      flash[:success] = t("notice.created")
       redirect_to users_path
     else
       flash_errors_message(@user, now: true)
@@ -29,18 +29,18 @@ class UsersController < ApplicationController
 
   def update
     if @user.update(user_params)
-      flash.now[:success] = t("success.update")
+      flash.now[:success] = t("notice.updated")
     else
       flash_errors_message(@user, now: true)
     end
   end
 
   def destroy
-    # Avoit user delete self
-    raise BlackCandy::Error::Forbidden if @user == Current.user
+    # Avoid user delete self
+    raise BlackCandy::Forbidden if @user == Current.user
 
     @user.destroy
-    flash.now[:success] = t("success.delete")
+    flash.now[:success] = t("notice.deleted")
   end
 
   private
@@ -50,7 +50,8 @@ class UsersController < ApplicationController
   end
 
   def auth_user
-    raise BlackCandy::Error::Forbidden unless @user == Current.user || is_admin?
+    raise BlackCandy::Forbidden if BlackCandy.config.demo_mode?
+    raise BlackCandy::Forbidden unless @user == Current.user || is_admin?
   end
 
   def user_params

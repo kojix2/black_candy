@@ -27,12 +27,12 @@ class SongTest < ActiveSupport::TestCase
   end
 
   test "should filter by album year" do
-    song_ids = Song.where(album: albums(:album2)).ids.sort
+    song_ids = Song.where(album: albums(:album1)).ids.sort
     assert_equal song_ids, Song.filter_records(album_year: 1984).ids.sort
   end
 
   test "should filter by multiple attributes" do
-    song_ids = Song.where(album: albums(:album2)).ids.sort
+    song_ids = Song.where(album: albums(:album1)).ids.sort
     assert_equal song_ids, Song.filter_records(album_genre: "Rock", album_year: 1984).ids.sort
   end
 
@@ -66,7 +66,7 @@ class SongTest < ActiveSupport::TestCase
 
   test "should sort by album year" do
     assert_equal songs(:various_artists_sample).name, Song.sort_records(:album_year).first.name
-    assert_equal songs(:flac_sample), Song.sort_records(:album_year, :desc).first
+    assert_equal songs(:mp3_sample), Song.sort_records(:album_year, :desc).first
   end
 
   test "should sort by name by default" do
@@ -74,11 +74,27 @@ class SongTest < ActiveSupport::TestCase
   end
 
   test "should get sort options" do
-    assert_equal %w[name created_at artist_name album_name album_year], Song.sort_options[:sorts]
-    assert_equal %w[name asc], Song.sort_options[:default]
+    assert_equal %w[name created_at artist_name album_name album_year], Song::SORT_OPTION.values
+    assert_equal "name", Song::SORT_OPTION.default.name
+    assert_equal "asc", Song::SORT_OPTION.default.direction
   end
 
   test "should use default sort when use invalid sort value" do
     assert_equal songs(:flac_sample), Song.sort_records(:invalid).first
+  end
+
+  test "should get unique error when create song with same md5_hash" do
+    song = Song.new(
+      name: "song_test",
+      file_path: Rails.root.join("test/fixtures/files/artist1_album2.mp3"),
+      file_path_hash: "fake_path_hash",
+      md5_hash: songs(:flac_sample).md5_hash,
+      artist_id: artists(:artist1).id,
+      album_id: albums(:album1).id
+    )
+
+    assert_raise ActiveRecord::RecordNotUnique do
+      song.save
+    end
   end
 end

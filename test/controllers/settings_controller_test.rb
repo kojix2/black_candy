@@ -29,8 +29,6 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should sync media when media_path setting updated" do
-    Setting.update(media_path: Rails.root.join("test/fixtures/files"))
-
     login users(:admin)
 
     assert_enqueued_with(job: MediaSyncJob) do
@@ -44,5 +42,14 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch setting_url, params: {setting: {discogs_token: "updated_token"}}, xhr: true
     assert_response :forbidden
+  end
+
+  test "should not update global settings when is on demo mode" do
+    with_env("DEMO_MODE" => "true") do
+      login users(:admin)
+
+      patch setting_url, params: {setting: {discogs_token: "updated_token"}}, xhr: true
+      assert_response :forbidden
+    end
   end
 end

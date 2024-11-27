@@ -3,6 +3,13 @@
 require "simplecov"
 
 SimpleCov.start "rails" do
+  # After upgrading to Rails 7.1, simplecov cannot collect coverage for files in the lib directory.
+  # It seems that the behavior of the Rails test command has changed. I have already tried adding the lib directory to the autoload once path,
+  # It works for the development environment, but for the test the database.yml must explicitly require the lib directory. So simplecov
+  # will still run after the required file. The result is that the coverage still does not include the file in the lib directory.
+  # Still didn't figure out how to solve it, so temporarily add the lib directory to the filter.
+  add_filter "/lib/"
+
   if ENV["CI"]
     require "simplecov-lcov"
 
@@ -26,19 +33,58 @@ allowed_sites_for_webmock = [
 
 WebMock.disable_net_connect!(allow_localhost: true, net_http_connect_on_start: true, allow: allowed_sites_for_webmock)
 
+MediaListener.configure do |config|
+  config.service_name = "media_listener_service_test"
+end
+
+MediaSyncJob.configure do |config|
+  config.parallel_processor_count = 0
+end
+
+class MediaFileMock < MediaFile
+  class << self
+    alias_method :real_file_info, :file_info
+  end
+
+  def initialize(file_path, attributes = {})
+    @file_path = file_path
+    @attributes = attributes
+    @mtime = File.mtime(file_path)
+  end
+
+  def mtime(path)
+    (path.to_s == @file_path.to_s) ? Time.now : @mtime
+  end
+
+  def file_info(path)
+    file_info = self.class.real_file_info(path)
+    (path.to_s == @file_path.to_s) ? file_info.merge(@attributes) : file_info
+  end
+end
+
 class ActiveSupport::TestCase
+  include Turbo::Broadcastable::TestHelper
+
+  # Run tests in parallel with specified workers
+  parallelize(workers: :number_of_processors)
+
+  # Fix SimpleCov to work with parallel tests, see: https://github.com/simplecov-ruby/simplecov/issues/718#issuecomment-538201587
+  parallelize_setup do |worker|
+    SimpleCov.command_name "#{SimpleCov.command_name}-#{worker}"
+  end
+
+  parallelize_teardown do |worker|
+    SimpleCov.result
+  end
+
   # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
   fixtures :all
 
   # Add more helper methods to be used by all tests here...
-  def new_user(attributes = {})
-    User.new({password: "foobar"}.merge(attributes))
-  end
-
   def clear_media_data
-    Artist.destroy_all
-    Album.destroy_all
-    Song.destroy_all
+    Artist.delete_all
+    Album.delete_all
+    Song.delete_all
   end
 
   def audio_bitrate(file_path)
@@ -63,11 +109,12 @@ class ActiveSupport::TestCase
   end
 
   def login(user = users(:visitor1))
-    post session_url, params: {user_session: {email: user.email, password: "foobar"}}
+    post sessions_url, params: {session: {email: user.email, password: "foobar"}}
   end
 
   def api_token_header(user)
-    {authorization: ActionController::HttpAuthentication::Token.encode_credentials(user.api_token)}
+    session = user.sessions.create!
+    {authorization: ActionController::HttpAuthentication::Token.encode_credentials(session.signed_id)}
   end
 
   def fixtures_file_path(file_name)
@@ -78,15 +125,13 @@ class ActiveSupport::TestCase
     File.read(file_path).force_encoding("BINARY").strip
   end
 
-  def media_file_info_stub(file_path, attributes = {})
-    proc do |media_file_path|
-      file_info = MediaFile.send(:get_tag_info, media_file_path).merge(
-        file_path: media_file_path.to_s,
-        file_path_hash: MediaFile.get_md5_hash(media_file_path),
-        md5_hash: MediaFile.get_md5_hash(media_file_path, with_mtime: true)
-      )
+  def stub_file_metadata(file_path, attributes = {})
+    media_file_mock = MediaFileMock.new(file_path, attributes)
 
-      (media_file_path.to_s == file_path.to_s) ? file_info.merge(**attributes, md5_hash: "new_md5_hash") : file_info
+    File.stub(:mtime, media_file_mock.method(:mtime)) do
+      MediaFile.stub(:file_info, media_file_mock.method(:file_info)) do
+        yield
+      end
     end
   end
 
